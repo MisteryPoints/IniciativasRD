@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link' 
 import { motion, AnimatePresence } from 'framer-motion'
 import { FileText, Calendar, Building2, FolderOpen, User, Search, ChevronRight, ChevronLeft, Loader2 } from "lucide-react"
-import { DocsProps, PromoterProps, IdentifierLawType, InitiativeResultType, GruposType, GruposPaginationState } from '@/components/types'
+import { DocsProps, PromoterProps, IdentifierLawType, InitiativeResultType, GruposType } from '@/components/types'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion"
@@ -13,23 +13,24 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
-import fetchDocs from '@/components//DocsFetch'
+import fetchDocs from '@/components/DocsFetch'
 import fetchPromoter from '@/components/PromoterFetch'
 import fetchGrupos from '@/components/GruposFetch'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import SimplifiedDescription from '@/components/simplified-description'
 
-const IniciativaCard: React.FC<{ iniciativa: InitiativeResultType }> = ({ iniciativa }) => {
+// Memoize IniciativaCard to prevent unnecessary re-renders [Uso la Memoization para prevenir re-renders innecesarios]
+const IniciativaCard = React.memo(({ iniciativa }: { iniciativa: InitiativeResultType }) => {
   const [loading, setLoading] = useState<boolean>(false)
   const [doc, setDoc] = useState<DocsProps>()
   const [promoter, setPromoter] = useState<PromoterProps>()
-  const identifier: IdentifierLawType = {
-    page: 1,
-    id: iniciativa.id,
-    periodoId: 0
-  }
  
-  const handleFetch = async () => {
+  const handleFetch = useCallback(async () => {
+    const identifier: IdentifierLawType = {
+      page: 1,
+      id: iniciativa.id,
+      periodoId: 0
+    }
     setLoading(true)
     const [document, proponentes] = await Promise.all([
       fetchDocs(identifier),
@@ -38,7 +39,7 @@ const IniciativaCard: React.FC<{ iniciativa: InitiativeResultType }> = ({ inicia
     setDoc(document)
     setPromoter(proponentes)
     setLoading(false)
-  } 
+  }, [iniciativa.id])
 
   return (
     <Dialog onOpenChange={() => handleFetch()}>
@@ -150,7 +151,7 @@ const IniciativaCard: React.FC<{ iniciativa: InitiativeResultType }> = ({ inicia
                     <AccordionTrigger>
                       <div className='flex items-center text-lg'>
                         <FileText className="w-5 h-5 mr-2" />
-                        {d.documento}
+                        <span className='font-bold'>Documento:</span>&nbsp;{d.documento}
                       </div>
                     </AccordionTrigger>
                     <AccordionContent>
@@ -161,7 +162,7 @@ const IniciativaCard: React.FC<{ iniciativa: InitiativeResultType }> = ({ inicia
                           {new Date(d.cargado).toLocaleDateString()}
                         </span>
                         <Link href={`https://s-sil.camaradediputados.gob.do:8095/ReportesGenerales/VerDocumento?documentoId=${d.id}`} target='_blank'>
-                          <Button variant="outline" size="sm">
+                          <Button variant="outline" size="sm" className='bg-slate-300 hover:bg-slate-200'>
                             Ver Documento
                           </Button>
                         </Link>
@@ -176,241 +177,245 @@ const IniciativaCard: React.FC<{ iniciativa: InitiativeResultType }> = ({ inicia
       </DialogContent>
     </Dialog>
   )
-}
+})
+
+IniciativaCard.displayName = 'IniciativaCard'
 
 export default function EnhancedLegislativeBrowser() {
-    const [grupos, setGrupos] = useState<GruposType[]>([])
-    const [tipo, setTipo] = useState<boolean>(false)
-    const [activeGrupo, setActiveGrupo] = useState<number | null>(null)
-    const [iniciativas, setIniciativas] = useState<InitiativeResultType[]>([])
-    const [searchTerm, setSearchTerm] = useState('')
-    const [currentPage, setCurrentPage] = useState(1)
-    const [totalPages, setTotalPages] = useState(1)
-    const [isLoading, setIsLoading] = useState(false)
-    const [isLoadingMore, setIsLoadingMore] = useState(false)
-    const [hasMorePages, setHasMorePages] = useState(true)
-  
-    const ITEMS_PER_PAGE = 10
-    const MAX_PAGES_TO_FETCH = 20
-  
-    useEffect(() => {
-      const param: GruposPaginationState = { periodoId: 0 }
-      const handleFetchGrupos = async () => {
-        const data = await fetchGrupos(param)
-        setGrupos(data)
-      }
-      handleFetchGrupos()
-    }, [])
-  
-    const fetchIniciativas = useCallback(async (page: number, isLoadingMore: boolean = false) => {
+  const [grupos, setGrupos] = useState<GruposType[]>([])
+  const [tipo, setTipo] = useState<boolean>(false)
+  const [activeGrupo, setActiveGrupo] = useState<number | null>(null)
+  const [iniciativas, setIniciativas] = useState<InitiativeResultType[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(5)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [hasMorePages, setHasMorePages] = useState(true)
+
+  const ITEMS_PER_PAGE = 10
+  const MAX_PAGES_TO_FETCH = 20
+
+  useEffect(() => {
+    const handleFetchGrupos = async () => {
+      const data = await fetchGrupos({ periodoId: 0 })
+      setGrupos(data)
+    }
+    handleFetchGrupos()
+  }, [])
+
+  const fetchIniciativas = useCallback(async (page: number, isLoadingMore: boolean = false) => {
+    if (isLoadingMore) {
+      setIsLoadingMore(true)
+    } else {
+      setIsLoading(true)
+    }
+
+    try {
+      const response = await fetch(`/api/iniciativas?page=${page}&grupo=${activeGrupo}&tipo=${tipo}&perimidas=false&keyword=${searchTerm}&periodoId=0`)
+      const data = await response.json()
+      
       if (isLoadingMore) {
-        setIsLoadingMore(true)
+        setIniciativas(prev => [...prev, ...data.results])
       } else {
-        setIsLoading(true)
+        setIniciativas(data.results)
       }
-  
-      try {
-        const response = await fetch(`/api/iniciativas?page=${page}&grupo=${activeGrupo}&tipo=${tipo}&perimidas=false&keyword=${searchTerm}&periodoId=0`)
-        const data = await response.json()
-        
-        if (isLoadingMore) {
-          setIniciativas(prev => [...prev, ...data.results])
-        } else {
-          setIniciativas(data.results)
-        }
-        
-        const totalPages = Math.ceil(data.total / data.pageSize)
-        setTotalPages(totalPages)
-        setHasMorePages(page < totalPages && page < MAX_PAGES_TO_FETCH)
-      } catch (error) {
-        console.error("Failed to fetch iniciativas:", error)
-      } finally {
-        if (isLoadingMore) {
-          setIsLoadingMore(false)
-        } else {
-          setIsLoading(false)
-        }
-      }
-    }, [activeGrupo, tipo, searchTerm])
-  
-    useEffect(() => {
-      if (activeGrupo !== null) {
-        setCurrentPage(1)
-        fetchIniciativas(1)
-      }
-    }, [activeGrupo, tipo, searchTerm, fetchIniciativas])
-  
-    const handlePageChange = (newPage: number) => {
-      setCurrentPage(newPage)
-      if (newPage * ITEMS_PER_PAGE > iniciativas.length && hasMorePages) {
-        fetchIniciativas(Math.ceil(iniciativas.length / ITEMS_PER_PAGE) + 1, true)
+      
+      const totalPages = Math.ceil(data.total / data.pageSize)
+      setTotalPages(totalPages)
+      setHasMorePages(page < totalPages && page < MAX_PAGES_TO_FETCH)
+    } catch (error) {
+      console.error("Failed to fetch iniciativas:", error)
+    } finally {
+      if (isLoadingMore) {
+        setIsLoadingMore(false)
+      } else {
+        setIsLoading(false)
       }
     }
-  
-    const handleSearch = (e: React.FormEvent) => {
-      e.preventDefault()
+  }, [activeGrupo, tipo, searchTerm])
+
+  useEffect(() => {
+    if (activeGrupo !== null) {
       setCurrentPage(1)
       fetchIniciativas(1)
     }
-  
-    const paginatedIniciativas = iniciativas?.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
-  
-    return (
-      <div className="container mx-auto p-4">
-        <h1 className="text-4xl font-bold mb-8 text-center">Iniciativas Legislativas</h1>
-  
-        <div className="flex flex-col lg:flex-row gap-8">
-          <div className="lg:w-1/3">
-            <div className="sticky top-4 space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Tipo de Iniciativa</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-col space-y-2">
-                    <Button
-                      variant={!tipo ? "default" : "outline"}
-                      onClick={() => {
-                        setTipo(false)
-                        setCurrentPage(1)
-                        fetchIniciativas(1)
-                      }}
-                      className="justify-start"
-                    >
-                      <FileText className="mr-2 h-4 w-4" />
-                      Resolución
-                    </Button>
-                    <Button
-                      variant={tipo ? "default" : "outline"}
-                      onClick={() => {
-                        setTipo(true)
-                        setCurrentPage(1)
-                        fetchIniciativas(1)
-                      }}
-                      className="justify-start"
-                    >
-                      <FileText className="mr-2 h-4 w-4" />
-                      Proyecto de Ley
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-  
-              <Card>
-                <CardHeader>
-                  <CardTitle>Grupos</CardTitle>
-                </CardHeader>
-                <ScrollArea className="h-[400px]">
-                  <CardContent>
-                    {grupos.map(grupo => ( 
-                      <Button 
-                        key={grupo.id} 
-                        variant="ghost"
-                        className={`w-full justify-start mb-2 ${activeGrupo === grupo.id ? 'bg-accent' : ''}`}
-                        onClick={() => {
-                          setActiveGrupo(grupo.id)
-                          setCurrentPage(1)
-                          fetchIniciativas(1)
-                        }}
-                      >   
-                        {grupo.descripcion}
-                      </Button> 
-                    ))} 
-                  </CardContent>
-                </ScrollArea>
-              </Card>
-            </div>
-          </div>
-  
-          <div className="lg:w-2/3">
-            <Card className="mb-6">
-              <CardContent className="pt-6">
-                <form onSubmit={handleSearch}>
-                  <div className="relative">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar iniciativas..."
-                      className="pl-8"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-                </form>
+  }, [activeGrupo, tipo, searchTerm, fetchIniciativas])
+
+  const handlePageChange = useCallback((newPage: number) => {
+    setCurrentPage(newPage)
+    if (newPage * ITEMS_PER_PAGE > iniciativas?.length && hasMorePages) {
+      fetchIniciativas(Math.ceil(iniciativas?.length / ITEMS_PER_PAGE) + 1, true)
+    }
+  }, [iniciativas?.length, hasMorePages, ITEMS_PER_PAGE, fetchIniciativas])
+
+  const handleSearch = useCallback((e: React.FormEvent) => {
+    e.preventDefault()
+    setCurrentPage(1)
+    fetchIniciativas(1)
+  }, [fetchIniciativas])
+ 
+
+  const handleTipoChange = useCallback((newTipo: boolean) => {
+    setTipo(newTipo)
+    setCurrentPage(1)
+    setIniciativas([])
+    setIsLoading(true)
+    fetchIniciativas(1).then(() => setIsLoading(false))
+  }, [fetchIniciativas])
+
+  const handleGrupoChange = useCallback((grupoId: number) => {
+    setActiveGrupo(grupoId)
+    setCurrentPage(1)
+    setIniciativas([])
+    setIsLoading(true)
+    fetchIniciativas(1).then(() => setIsLoading(false))
+  }, [fetchIniciativas])
+
+  return (
+    <div className="container mx-auto p-4">
+      <h1 className="text-4xl font-bold mb-8 text-center">Iniciativas Legislativas</h1>
+
+      <div className="flex flex-col lg:flex-row gap-8">
+        <div className="lg:w-1/3">
+          <div className="sticky top-4 space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Tipo de Iniciativa</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col space-y-2">
+                  <Button
+                    variant={!tipo ? "default" : "outline"}
+                    onClick={() => handleTipoChange(false)}
+                    className="justify-start"
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Resolución
+                  </Button>
+                  <Button
+                    variant={tipo ? "default" : "outline"}
+                    onClick={() => handleTipoChange(true)}
+                    className="justify-start"
+                  >
+                    <FileText className="mr-2  h-4 w-4" />
+                    Proyecto de Ley
+                  </Button>
+                </div>
               </CardContent>
             </Card>
-  
-            {isLoading ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                {[...Array(6)].map((_, index) => (
-                  <Card key={index}>
-                    <CardContent className="p-4">
-                      <Skeleton className="h-6 w-3/4 mb-2" />
-                      <Skeleton className="h-4 w-1/2 mb-4" />
-                      <Skeleton className="h-4 w-full mb-2" />
-                      <Skeleton className="h-4 w-full" />
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <AnimatePresence>
-                    {paginatedIniciativas?.map((iniciativa, index) => (
-                      <motion.div
-                        key={iniciativa.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.3, delay: index * 0.05 }}
-                      >
-                        <IniciativaCard iniciativa={iniciativa} />
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </div>
-  
-                {iniciativas?.length === 0 && (
-                  <Card>
-                    <CardContent className="pt-6 text-center text-muted-foreground">
-                      No se encontraron iniciativas que coincidan con la búsqueda.
-                    </CardContent>
-                  </Card>
-                )}
-  
-                {iniciativas?.length > 0 && (
-                  <div className="mt-6 flex justify-center items-center space-x-2">
-                    <Button
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage === 1}
-                      variant="outline"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      Anterior
-                    </Button>
-                    <span className="text-sm text-muted-foreground">
-                      Página {currentPage} de {Math.min(Math.ceil(iniciativas.length / ITEMS_PER_PAGE), totalPages)}
-                    </span>
-                    <Button
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage === Math.min(Math.ceil(iniciativas.length / ITEMS_PER_PAGE), totalPages) && !hasMorePages}
-                      variant="outline"
-                    >
-                      {isLoadingMore ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          Siguiente
-                          <ChevronRight className="h-4 w-4" />
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </>
-            )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Grupos</CardTitle>
+              </CardHeader>
+              <ScrollArea className="h-[400px]">
+                <CardContent>
+                  {grupos.map(grupo => ( 
+                    <Button 
+                      key={grupo.id} 
+                      variant="ghost"
+                      className={`w-full justify-start mb-2 ${activeGrupo === grupo.id ? 'bg-accent' : ''}`}
+                      onClick={() => handleGrupoChange(grupo.id)}
+                    >   
+                      {grupo.descripcion}
+                    </Button> 
+                  ))} 
+                </CardContent>
+              </ScrollArea>
+            </Card>
           </div>
         </div>
+
+        <div className="lg:w-2/3">
+          <Card className="mb-6">
+            <CardContent className="pt-6">
+              <form onSubmit={handleSearch}>
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar iniciativas..."
+                    className="pl-8"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          {isLoading ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {[...Array(6)].map((_, index) => (
+                <Card key={index}>
+                  <CardContent className="p-4">
+                    <Skeleton className="h-6 w-3/4 mb-2" />
+                    <Skeleton className="h-4 w-1/2 mb-4" />
+                    <Skeleton className="h-4 w-full mb-2" />
+                    <Skeleton className="h-4 w-full" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-2">
+                <AnimatePresence>
+                  {iniciativas?.map((iniciativa) => (
+                    <motion.div
+                      key={iniciativa.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <IniciativaCard iniciativa={iniciativa} />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+
+              {iniciativas?.length === 0 && !isLoading && (
+                <Card>
+                  <CardContent className="pt-6 text-center text-muted-foreground">
+                    No se encontraron iniciativas que coincidan con la búsqueda.
+                  </CardContent>
+                </Card>
+              )}
+
+              {iniciativas?.length > 0 && (
+                <div className="mt-6 flex justify-center items-center space-x-2">
+                  <Button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    variant="outline"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Anterior
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Página {currentPage} de {Math.min(Math.ceil(iniciativas?.length / ITEMS_PER_PAGE), totalPages)}
+                  </span>
+                  <Button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === Math.min(Math.ceil(iniciativas?.length / ITEMS_PER_PAGE), totalPages) && !hasMorePages}
+                    variant="outline"
+                  >
+                    {isLoadingMore ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        Siguiente
+                        <ChevronRight className="h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
-    )
-  }
+    </div>
+  )
+}
